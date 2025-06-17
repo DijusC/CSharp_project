@@ -1,25 +1,66 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36203.30 d17.14
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScannerB", "ScannerB\ScannerB.csproj", "{89A8433E-B98A-4BA0-8C14-4A028C95C6ED}"
-EndProject
-Global
-	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{89A8433E-B98A-4BA0-8C14-4A028C95C6ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{89A8433E-B98A-4BA0-8C14-4A028C95C6ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{89A8433E-B98A-4BA0-8C14-4A028C95C6ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{89A8433E-B98A-4BA0-8C14-4A028C95C6ED}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {6486A66F-9435-4F3E-A331-80B15448161F}
-	EndGlobalSection
-EndGlobal
+using System;
+using System.IO.Pipes;
+using System.Threading.Tasks;
+
+namespace Master
+{
+    public class NamedPipeHandler
+    {
+        private readonly WordIndex wordIndex;
+
+        public NamedPipeHandler(WordIndex wordIndex)
+        {
+            this.wordIndex = wordIndex;
+        }
+
+        public async Task ListenToPipeAsync(string pipeName)
+        {
+            try
+            {
+                var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In);
+                Console.WriteLine($"Laukiama prisijungimo prie kanalo {pipeName}...");
+                await pipeServer.WaitForConnectionAsync();
+                Console.WriteLine($"Prisijungta prie {pipeName}");
+
+                using (var reader = new StreamReader(pipeServer))
+                {
+                    string line;
+                    while ((line = await reader.ReadLineAsync()) != null)
+                    {
+                        Console.WriteLine($"Gauta eilutė iš {pipeName}: {line}");
+                        if (line == "END")
+                        {
+                            Console.WriteLine($"Gautas END signalas iš {pipeName}");
+                            Program.AgentCompleted();
+                            break;
+                        }
+                        var parts = line.Split(':');
+                        if (parts.Length == 3)
+                        {
+                            string fileName = parts[0];
+                            string word = parts[1];
+                            if (int.TryParse(parts[2], out int count))
+                            {
+                                Console.WriteLine($"Apdorojama: {fileName}, {word}, {count}");
+                                wordIndex.AddWord(fileName, word, count);
+                            }
+                            else
+                            {
+                                Console.WriteLine($"KLAIDA: Negalima konvertuoti skaičiaus: {parts[2]}");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"KLAIDA: Neteisingas eilutės formatas: {line}");
+                        }
+                    }
+                }
+                pipeServer.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"KLAIDA klausantis kanalo {pipeName}: {ex.Message}");
+            }
+        }
+    }
+}
