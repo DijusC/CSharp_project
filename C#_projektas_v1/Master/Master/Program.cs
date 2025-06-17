@@ -1,26 +1,47 @@
-﻿using System;
-using System.Diagnostics;
+using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Master
 {
     class Program
     {
+        private static int agentsCompleted = 0;
+        private static readonly object lockObject = new object();
+
+        public static void AgentCompleted()
+        {
+            lock (lockObject)
+            {
+                agentsCompleted++;
+                Console.WriteLine($"Agentas baigė darbą. Baigusių agentų skaičius: {agentsCompleted}");
+            }
+        }
+
         static async Task Main(string[] args)
         {
-            Process.GetCurrentProcess().ProcessorAffinity = (IntPtr)(1 << 0);// Nustatome CPU branduolio afinitetą (0 branduolys)
-
             Console.WriteLine("Master procesas paleistas, laukia agentų prisijungimų...");
+            try
+            {
+                var wordIndex = new WordIndex();
+                var handler = new NamedPipeHandler(wordIndex);
 
-            var wordIndex = new WordIndex();
+                var agent1Task = handler.ListenToPipeAsync("agent1");
+                var agent2Task = handler.ListenToPipeAsync("agent2");
 
-            var pipe1Task = NamedPipeHandler.ListenToPipeAsync("agent1", wordIndex);
-            var pipe2Task = NamedPipeHandler.ListenToPipeAsync("agent2", wordIndex);
+                while (agentsCompleted < 2)
+                {
+                    await Task.Delay(100);
+                }
 
-            await Task.WhenAll(pipe1Task, pipe2Task);
-
-            wordIndex.GenerateFinalReport("output.txt");
-            Console.WriteLine("Ataskaita suformuota output.txt faile. Programa baigia darbą.");
+                string outputPath = Path.Combine(Directory.GetCurrentDirectory(), "output.txt");
+                wordIndex.GenerateFinalReport(outputPath);
+                Console.WriteLine($"Ataskaita suformuota: {outputPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"KLAIDA Master procese: {ex.Message}");
+            }
         }
     }
 }
