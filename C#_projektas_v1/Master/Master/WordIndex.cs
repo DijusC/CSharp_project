@@ -1,26 +1,50 @@
-﻿public class WordIndex
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace Master
 {
-    private readonly Dictionary<string, Dictionary<string, int>> fileWordCounts = new Dictionary<string, Dictionary<string, int>>();
-
-    public void AddWord(string fileName, string word, int count)
+    public class WordIndex
     {
-        if (!fileWordCounts.ContainsKey(fileName))
-        {
-            fileWordCounts[fileName] = new Dictionary<string, int>();
-        }
-        fileWordCounts[fileName][word] = fileWordCounts[fileName].ContainsKey(word) ? fileWordCounts[fileName][word] : count;
-    }
+        private readonly Dictionary<string, Dictionary<string, int>> fileWordCounts = new Dictionary<string, Dictionary<string, int>>();
 
-    public void GenerateFinalReport(string outputPath)
-    {
-        using (var writer = new StreamWriter(outputPath))
+        public void AddWord(string fileName, string word, int count)
         {
-            foreach (var fileEntry in fileWordCounts.OrderBy(f => f.Key))
+            try
             {
-                foreach (var wordEntry in fileEntry.Value.OrderBy(w => w.Key))
+                if (!fileWordCounts.ContainsKey(fileName))
                 {
-                    writer.WriteLine($"{fileEntry.Key}:{wordEntry.Key}:{wordEntry.Value}");
+                    fileWordCounts[fileName] = new Dictionary<string, int>();
                 }
+                fileWordCounts[fileName][word] = fileWordCounts[fileName].ContainsKey(word) ? fileWordCounts[fileName][word] : count; // Uztikrinu, kad zodis nebus dubliuojamas
+                Console.WriteLine($"Pridėtas žodis: {fileName}, {word}, {count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"KLAIDA pridedant žodį {word} failui {fileName}: {ex.Message}");
+            }
+        }
+
+        public void GenerateFinalReport(string outputPath)
+        {
+            try
+            {
+                using (var writer = new StreamWriter(outputPath))
+                {
+                    foreach (var fileEntry in fileWordCounts.OrderBy(f => f.Key))
+                    {
+                        foreach (var wordEntry in fileEntry.Value.OrderBy(w => w.Key))
+                        {
+                            writer.WriteLine($"{fileEntry.Key}:{wordEntry.Key}:{wordEntry.Value}");
+                        }
+                    }
+                }
+                Console.WriteLine($"Ataskaita įrašyta į: {outputPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"KLAIDA generuojant ataskaitą: {ex.Message}");
             }
         }
     }
