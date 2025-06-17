@@ -6,36 +6,60 @@ namespace Master
 {
     public class NamedPipeHandler
     {
-        public static async Task ListenToPipeAsync(string pipeName, WordIndex wordIndex)
+        private readonly WordIndex wordIndex;
+
+        public NamedPipeHandler(WordIndex wordIndex)
         {
-            while (true)
+            this.wordIndex = wordIndex;
+        }
+
+        public async Task ListenToPipeAsync(string pipeName)
+        {
+            try
             {
-                using (var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In))
+                var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In);
+                Console.WriteLine($"Laukiama prisijungimo prie kanalo {pipeName}...");
+                await pipeServer.WaitForConnectionAsync();
+                Console.WriteLine($"Prisijungta prie {pipeName}");
+
+                using (var reader = new StreamReader(pipeServer))
                 {
-                    Console.WriteLine($"Laukiama prisijungimo prie kanalo {pipeName}...");
-                    await Task.Run(() => pipeServer.WaitForConnection());
-                    Console.WriteLine($"Prisijungta prie {pipeName}");
-
-                    using (var reader = new StreamReader(pipeServer))
+                    string line;
+                    while ((line = await reader.ReadLineAsync()) != null)
                     {
-                        while (!reader.EndOfStream)
+                        Console.WriteLine($"Gauta eilutė iš {pipeName}: {line}");
+                        if (line == "END")
                         {
-                            string message = await reader.ReadLineAsync();
-                            if (message == "END") break;
-
-                            var parts = message.Split(':');
-                            if (parts.Length == 3)
+                            Console.WriteLine($"Gautas END signalas iš {pipeName}");
+                            Program.AgentCompleted();
+                            break;
+                        }
+                        var parts = line.Split(':');
+                        if (parts.Length == 3)
+                        {
+                            string fileName = parts[0];
+                            string word = parts[1];
+                            if (int.TryParse(parts[2], out int count))
                             {
-                                string fileName = parts[0];
-                                string word = parts[1];
-                                int count = int.Parse(parts[2]);
+                                Console.WriteLine($"Apdorojama: {fileName}, {word}, {count}");
                                 wordIndex.AddWord(fileName, word, count);
                             }
+                            else
+                            {
+                                Console.WriteLine($"KLAIDA: Negalima konvertuoti skaičiaus: {parts[2]}");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"KLAIDA: Neteisingas eilutės formatas: {line}");
                         }
                     }
                 }
-                Console.WriteLine($"Kanalas {pipeName} u�darytas.");
-                break;
+                pipeServer.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"KLAIDA klausantis kanalo {pipeName}: {ex.Message}");
             }
         }
     }
